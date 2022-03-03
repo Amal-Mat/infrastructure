@@ -25,6 +25,15 @@ Parameters:
     Type: String
     Default: 10.10.3.0/24
 
+  AMI:
+    Description: "AMI for Instance"
+    Type: String
+    
+  KeyName:
+    Description: "Key Name for Instance"
+    Type: String
+
+
 Resources:
   # Create a VPC
   VPC:
@@ -125,3 +134,89 @@ Resources:
     Properties:
       RouteTableId: !Ref RouteTable
       SubnetId: !Ref Subnet3
+
+  # Adding a security group - Application
+  Application:
+   Type: AWS::EC2::SecurityGroup
+   Properties:
+      GroupDescription: Base Security Group
+      SecurityGroupIngress:
+         - IpProtocol: tcp
+           CidrIp: 0.0.0.0/0
+           FromPort: 22
+           ToPort: 22
+      VpcId: !Ref VPC
+  SGBaseIngress:
+   Type: AWS::EC2::SecurityGroupIngress
+   Properties:
+      GroupId: !Ref Application
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !GetAtt Application.GroupId
+  SGBaseIngress1:
+   Type: AWS::EC2::SecurityGroupIngress
+   Properties:
+      GroupId: !Ref Application
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt Application.GroupId
+  SGBaseIngress2:
+   Type: AWS::EC2::SecurityGroupIngress
+   Properties:
+      GroupId: !Ref Application
+      IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      SourceSecurityGroupId: !GetAtt Application.GroupId
+
+  # Adding a EC2 Instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMI
+      KeyName: !Ref KeyName
+      InstanceType: "t2.micro"
+      BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeType: "gp2"
+            DeleteOnTermination: "false"
+            VolumeSize: "60"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeleteOnTermination: "true"
+          SubnetId: !Ref Subnet1
+          DeviceIndex: "0"
+          GroupSet: 
+            - !Ref Application
+
+Outputs:
+  VpcId:
+    Description: The VPC ID 
+    Value: !Ref VPC
+
+  SubnetId1:
+    Description: The Subnet ID 1 
+    Value: !Ref Subnet1
+
+  SubnetId2:
+    Description: The Subnet ID 2 
+    Value: !Ref Subnet2
+
+  SubnetId3: 
+    Description: The Subnet ID 3
+    Value: !Ref Subnet3
+
+  InternetGateway:
+    Description: Internet Gateway 
+    Value: !Ref InternetGateway
+
+  Route:
+    Description: Route
+    Value: !Ref Route
+
+  RouteTable:
+    Description: Route Table
+    Value: !Ref RouteTable
