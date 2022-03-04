@@ -28,7 +28,7 @@ Parameters:
   AMI:
     Description: "AMI for Instance"
     Type: String
-    
+
   KeyName:
     Description: "Key Name for Instance"
     Type: String
@@ -145,31 +145,43 @@ Resources:
            CidrIp: 0.0.0.0/0
            FromPort: 22
            ToPort: 22
+         - IpProtocol: tcp
+           CidrIp: 0.0.0.0/0
+           FromPort: 80
+           ToPort: 80
+         - IpProtocol: tcp
+           CidrIp: 0.0.0.0/0
+           FromPort: 443
+           ToPort: 443
+         - IpProtocol: tcp
+           CidrIp: 0.0.0.0/0
+           FromPort: 3000
+           ToPort: 3000
       VpcId: !Ref VPC
-  SGBaseIngress:
-   Type: AWS::EC2::SecurityGroupIngress
-   Properties:
-      GroupId: !Ref Application
-      IpProtocol: tcp
-      FromPort: 80
-      ToPort: 80
-      SourceSecurityGroupId: !GetAtt Application.GroupId
-  SGBaseIngress1:
-   Type: AWS::EC2::SecurityGroupIngress
-   Properties:
-      GroupId: !Ref Application
-      IpProtocol: tcp
-      FromPort: 443
-      ToPort: 443
-      SourceSecurityGroupId: !GetAtt Application.GroupId
-  SGBaseIngress2:
-   Type: AWS::EC2::SecurityGroupIngress
-   Properties:
-      GroupId: !Ref Application
-      IpProtocol: tcp
-      FromPort: 3000
-      ToPort: 3000
-      SourceSecurityGroupId: !GetAtt Application.GroupId
+  # SGBaseIngress:
+  #  Type: AWS::EC2::SecurityGroupIngress
+  #  Properties:
+  #     GroupId: !Ref Application
+  #     IpProtocol: tcp
+  #     FromPort: 80
+  #     ToPort: 80
+  #     #SourceSecurityGroupId: !GetAtt Application.GroupId
+  # SGBaseIngress1:
+  #  Type: AWS::EC2::SecurityGroupIngress
+  #  Properties:
+  #     GroupId: !Ref Application
+  #     IpProtocol: tcp
+  #     FromPort: 443
+  #     ToPort: 443
+  #     #SourceSecurityGroupId: !GetAtt Application.GroupId
+  # SGBaseIngress2:
+  #  Type: AWS::EC2::SecurityGroupIngress
+  #  Properties:
+  #     GroupId: !Ref Application
+  #     IpProtocol: tcp
+  #     FromPort: 3000
+  #     ToPort: 3000
+  #     #SourceSecurityGroupId: !GetAtt Application.GroupId
 
   # Adding a EC2 Instance
   EC2Instance:
