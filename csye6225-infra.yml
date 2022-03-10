@@ -9,7 +9,7 @@ Parameters:
     Type: String
     Default: 10.10.0.0/16
 
-  # Creating 3 subnets (Each for different AZ)
+  # Creating 3 public subnets (Each for different AZ)
   Subnet1CIDR:
     Description: Enter the IP Range (CIDR Notation) for the subnet in AZ 1
     Type: String
@@ -25,6 +25,22 @@ Parameters:
     Type: String
     Default: 10.10.3.0/24
 
+  # Creating 3 private subnets (Each for different AZ)
+  PrivateSubnet1CIDR:
+    Description: Enter the IP Range (CIDR Notation) for the private subnet in AZ 1
+    Type: String
+    Default: 10.10.4.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Enter the IP Range (CIDR Notation) for the private subnet in AZ 2
+    Type: String
+    Default: 10.10.5.0/24
+
+  PrivateSubnet3CIDR:
+    Description: Enter the IP Range (CIDR Notation) for the private subnet in AZ 3
+    Type: String
+    Default: 10.10.6.0/24
+
   AMI:
     Description: "AMI for Instance"
     Type: String
@@ -32,6 +48,28 @@ Parameters:
   KeyName:
     Description: "Key Name for Instance"
     Type: String
+
+  environment:
+    Description: "Environment"
+    Type: String
+  
+  DatabaseUsername:
+    NoEcho: 'true'
+    Description: Username for mysql database
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Should begin with a letter and contain only alphanumeric characters.
+
+  DatabasePassword:
+    NoEcho: 'true'
+    Description: Password for mysql database
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: Should contain only alphanumeric characters.
 
 
 Resources:
@@ -59,12 +97,23 @@ Resources:
 
   # Create a public route table for the VPC
   RouteTable:
+    DependsOn: VPCGatewayAttachment
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags: 
       - Key: Name
         Value: RouteTable
+
+  # Create a private route table for RDS in this VPC
+  PrivateRouteTable:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRouteTable
 
   # Add routes in the route table
   Route:
@@ -75,7 +124,15 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  # Create a subnet in AZ 1
+  # Add private routes in the private route table
+  # PrivateRoute:
+  #   Type: AWS::EC2::Route
+  #   DependsOn: VPCGatewayAttachment
+  #   Properties:
+  #     RouteTableId: !Ref PrivateRouteTable
+  #     GatewayId: !Ref InternetGateway
+
+  # Create a public subnet in AZ 1
   Subnet1:
     Type: AWS::EC2::Subnet
     DependsOn: VPC
@@ -88,7 +145,7 @@ Resources:
       - Key: Name
         Value: Subnet1
 
-  # Create a subnet in AZ 2
+  # Create a public subnet in AZ 2
   Subnet2:
     Type: AWS::EC2::Subnet
     DependsOn: VPC
@@ -101,7 +158,7 @@ Resources:
       - Key: Name
         Value: Subnet2
 
-  # Create a subnet in AZ 3
+  # Create a public subnet in AZ 3
   Subnet3:
     Type: AWS::EC2::Subnet
     DependsOn: VPC
@@ -113,6 +170,47 @@ Resources:
       Tags:
       - Key: Name
         Value: Subnet3
+
+  
+  # Create a private subnet in AZ 1
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ''] # AZ 1
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet1
+
+  # Create a private subnet in AZ 2
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ''] # AZ 2
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet2
+
+  # Create a private subnet in AZ 3
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ''] # AZ 3
+      CidrBlock: !Ref PrivateSubnet3CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet3
+
 
   # Associate Route Table with subnet in AZ 1
   Subnet1RouteTableAssociation:
@@ -134,6 +232,27 @@ Resources:
     Properties:
       RouteTableId: !Ref RouteTable
       SubnetId: !Ref Subnet3
+
+  # Associate Private Route Table with Private Subnet in AZ 1
+  PrivateSubnet1PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  # Associate Private Route Table with Private Subnet in AZ 2
+  PrivateSubnet2PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  # Associate Private Route Table with Private Subnet in AZ 3
+  PrivateSubnet3PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet3
 
   # Adding a security group - Application
   Application:
@@ -158,30 +277,66 @@ Resources:
            FromPort: 3000
            ToPort: 3000
       VpcId: !Ref VPC
-  # SGBaseIngress:
-  #  Type: AWS::EC2::SecurityGroupIngress
-  #  Properties:
-  #     GroupId: !Ref Application
-  #     IpProtocol: tcp
-  #     FromPort: 80
-  #     ToPort: 80
-  #     #SourceSecurityGroupId: !GetAtt Application.GroupId
-  # SGBaseIngress1:
-  #  Type: AWS::EC2::SecurityGroupIngress
-  #  Properties:
-  #     GroupId: !Ref Application
-  #     IpProtocol: tcp
-  #     FromPort: 443
-  #     ToPort: 443
-  #     #SourceSecurityGroupId: !GetAtt Application.GroupId
-  # SGBaseIngress2:
-  #  Type: AWS::EC2::SecurityGroupIngress
-  #  Properties:
-  #     GroupId: !Ref Application
-  #     IpProtocol: tcp
-  #     FromPort: 3000
-  #     ToPort: 3000
-  #     #SourceSecurityGroupId: !GetAtt Application.GroupId
+
+  # Adding a DB Security Group - Database
+  Database:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Application to access Database
+      VpcId: !Ref VPC
+
+  SecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'    
+    Properties:
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: 
+        Fn::GetAtt:
+          - Application
+          - GroupId
+      GroupId:
+        Fn::GetAtt:
+          - Database
+          - GroupId    
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for mySQL Database
+      DBSubnetGroupName: 'RDS Subnet Group'
+      SubnetIds:
+      - Ref: PrivateSubnet1
+      - Ref: PrivateSubnet2
+      - Ref: PrivateSubnet3
+
+  RDSInstance:
+    Type: 'AWS::RDS::DBInstance'
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: '50'
+      Engine: MySQL
+      EngineVersion: 8.0.16
+      DBInstanceClass: db.t3.micro
+      MultiAZ: 'false'
+      DBInstanceIdentifier: csye6225
+      MasterUsername: !Ref DatabaseUsername
+      MasterUserPassword: !Ref DatabasePassword
+      DBParameterGroupName: !Ref RDSParameterGroup
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups: 
+        - !GetAtt Database.GroupId
+      PubliclyAccessible: 'false'
+      DBName: csye6225
+      Port: 3306
+
+  RDSParameterGroup:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Properties: 
+      Description: CloudFormation MySQL Parameter Group
+      Family: mysql8.0
+      Parameters:
+        sql_mode: IGNORE_SPACE
 
   # Adding a EC2 Instance
   EC2Instance:
@@ -203,6 +358,78 @@ Resources:
           DeviceIndex: "0"
           GroupSet: 
             - !Ref Application
+      IamInstanceProfile: !Ref S3Profile
+      UserData:
+        Fn::Base64:
+          !Sub | 
+            #!/bin/bash
+            echo export DB_HOST=${!GetAtt EC2Instance.PublicIp} >> /etc/profile
+            echo export DB_USER=${DatabaseUsername} >> /etc/profile
+            echo export DB_PASSWORD=${DatabasePassword} >> /etc/profile
+            echo export DB_NAME="csye6225" >> /etc/profile
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join ['.', [!Select [2, !Split [/, !Ref AWS::StackId ]], !Ref environment, 'domain', 'tld']]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: 'aws:kms'
+            KMSMasterKeyID: KMS-KEY-ARN
+      LifecycleConfiguration:
+        Rules:
+        - Id: StandardIARule
+          Prefix: standard_is
+          Status: Enabled
+          ExpirationInDays: 365
+          Transitions:
+          - TransitionInDays: 30
+            StorageClass: STANDARD_IA
+          - TransitionInDays: 90
+            StorageClass: GLACIER
+
+  IAMS3Policy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: WebAppS3
+      Roles: 
+        - !Ref IAMS3Role
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListMultipleUploadParts
+              - s3:AbortMultipartUpload
+            Resource:
+              - !Sub arn:aws:s3:::${S3Bucket}
+              - !Sub arn:aws:s3:::${S3Bucket}/*
+
+  IAMS3Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "EC2-CSYE6225"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+
+  S3Profile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles: 
+        - !Ref IAMS3Role
 
 Outputs:
   VpcId:
@@ -232,3 +459,11 @@ Outputs:
   RouteTable:
     Description: Route Table
     Value: !Ref RouteTable
+
+  S3Bucket:
+    Description: S3-Bucket
+    Value: !Ref S3Bucket
+
+  EC2Instance:
+    Description: Webserver EC2 Instance
+    Value: !Ref EC2Instance
