@@ -327,7 +327,7 @@ Resources:
       VPCSecurityGroups: 
         - !GetAtt Database.GroupId
       PubliclyAccessible: 'false'
-      DBName: csye6225
+      DBName: "csye6225"
       Port: 3306
 
   RDSParameterGroup:
@@ -360,34 +360,54 @@ Resources:
             - !Ref Application
       IamInstanceProfile: !Ref S3Profile
       UserData:
-        Fn::Base64:
+        Fn::Base64: 
           !Sub | 
             #!/bin/bash
-            echo export DB_HOST=${!GetAtt EC2Instance.PublicIp} >> /etc/profile
-            echo export DB_USER=${DatabaseUsername} >> /etc/profile
-            echo export DB_PASSWORD=${DatabasePassword} >> /etc/profile
-            echo export DB_NAME="csye6225" >> /etc/profile
+            sed -i '/scripts-user/c\ - [scripts-user, always]' /etc/cloud/cloud.cfg
+            cd /var/lib/cloud/scripts/per-boot/
+            touch reload.sh
+            cat > /var/lib/cloud/scripts/per-boot/reload.sh << 'EOF'
+              sudo pm2 reload all --update-env
+            EOF
+            cat > /etc/environment << 'EOF'
+            export DB_USER=${DatabaseUsername}
+            export DB_PASSWORD=${DatabasePassword}
+            export DB_NAME="csye6225"
+            export DB_HOST=${RDSInstance.Endpoint.Address}
+            export AWS_BUCKET_REGION=${AWS::Region}
+            export AWS_BUCKET_NAME=${S3Bucket}
+            EOF
+            source /etc/profile
+            cd /home/ec2-user/webservice
+            rm -rf node_modules
+            sudo npm i
+            sudo pm2 reload all --update-env
+
 
   S3Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Join ['.', [!Select [2, !Split [/, !Ref AWS::StackId ]], !Ref environment, 'domain', 'tld']]
+      AccessControl: Private
+      BucketName: !Join ['.', [!Select [2, !Split [/, !Ref AWS::StackId ]], !Ref environment, 'amalmathur', 'me']]
       BucketEncryption:
         ServerSideEncryptionConfiguration:
         - ServerSideEncryptionByDefault:
-            SSEAlgorithm: 'aws:kms'
-            KMSMasterKeyID: KMS-KEY-ARN
+            SSEAlgorithm: AES256
       LifecycleConfiguration:
         Rules:
-        - Id: StandardIARule
-          Prefix: standard_is
-          Status: Enabled
-          ExpirationInDays: 365
-          Transitions:
-          - TransitionInDays: 30
-            StorageClass: STANDARD_IA
-          - TransitionInDays: 90
-            StorageClass: GLACIER
+          - Id: StandardIARule
+            Prefix: standard_is
+            Status: Enabled
+            ExpirationInDays: 365
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    DeletionPolicy: Delete
 
   IAMS3Policy:
     Type: 'AWS::IAM::Policy'
@@ -403,8 +423,15 @@ Resources:
               - s3:GetObject
               - s3:PutObject
               - s3:DeleteObject
-              - s3:ListMultipleUploadParts
+              - s3:PutObjectAcl
+              - s3:ListMultipartUploadParts
               - s3:AbortMultipartUpload
+              - ec2:RunInstances
+              - ec2:AssociateIamInstanceProfile
+              - ec2:ReplaceIamInstanceProfileAssociation
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - s3:ListAllMyBuckets
             Resource:
               - !Sub arn:aws:s3:::${S3Bucket}
               - !Sub arn:aws:s3:::${S3Bucket}/*
