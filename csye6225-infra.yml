@@ -735,7 +735,7 @@ Resources:
       Users: 
         - ghactions-app
 
-
+#CodeDeploy IAM Policy
   GHCodeDeploy:
     Type: 'AWS::IAM::Policy'
     Properties:
