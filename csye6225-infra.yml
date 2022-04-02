@@ -504,8 +504,8 @@ Resources:
           DeleteOnTermination: true
         IamInstanceProfile: 
           Arn: !GetAtt
-          - S3Profile
-          - Arn
+            - S3Profile
+            - Arn
         UserData:
           Fn::Base64: 
             !Sub | 
@@ -580,13 +580,13 @@ Resources:
   CPUUsageHigh: 
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmDescription: Scale up if CPU > 5%
+      AlarmDescription: Scale up if CPU > 11%
       MetricName: CPUUtilization
       Namespace: "AWS/EC2"
       Statistic: Average
-      Period: 120
-      EvaluationPeriods: 2
-      Threshold: 5
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 11
       AlarmActions: 
       - !Ref WebAppScaleUpPolicy
       Dimensions:
@@ -598,13 +598,13 @@ Resources:
   CPUUsageLow:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmDescription: "Scale down if CPU < 3%"
+      AlarmDescription: "Scale down if CPU < 9%"
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
-      Period: 120
-      EvaluationPeriods: 2
-      Threshold: 3
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 9
       AlarmActions: 
       - !Ref WebAppScaleDownPolicy
       Dimensions:
@@ -697,7 +697,164 @@ Resources:
     Properties:
       Path: "/"
       Roles: 
-        - !Ref IAMS3Role
+        #- !Ref IAMS3Role
+        - !Ref CodeDeployServiceRole
+
+  CodeDeployEC2S3:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CodeDeploy-EC2-S3
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:ListObject"
+            Resource:
+              - !Sub arn:aws:s3:::csye6225-codedeploy-us-east-1
+              - !Sub arn:aws:s3:::csye6225-codedeploy-us-east-1/*
+      Roles:
+        - !Ref CodeDeployServiceRole
+
+  GHUploadToS3:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: GH-Upload-To-S3
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: 
+              - "s3:GetObject"
+              - "s3:ListObject"
+              - "s3:PutObject"
+            Resource:
+              - arn:aws:s3:::csye6225-codedeploy-us-east-1
+              - arn:aws:s3:::csye6225-codedeploy-us-east-1/*
+      Users: 
+        - ghactions-app
+
+#CodeDeploy IAM Policy
+  GHCodeDeploy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: GH-Code-Deploy
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "codedeploy:GetDeployment"
+              - "codedeploy:CreateDeployment"
+              - "codedeploy:RegisterApplicationRevision"
+              - "codedeploy:GetApplicationRevision"
+            Resource: !Join ["", ["arn:aws:codedeploy:us-east-1:", !Ref "AWS::AccountId", ":application:", !Ref CodeDeployApplication,],]
+          - Effect: Allow
+            Action: 
+              - "codedeploy:CreateDeployment"
+              - "codedeploy:GetDeployment"
+            Resource:
+              - '*'
+          - Effect: Allow
+            Action: 
+              - codedeploy:GetDeploymentConfig
+            Resource:
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.OneAtATime",],]
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.HalfAtATime",],]
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.AllAtOnce",],]
+      Users: 
+        - ghactions-app
+
+  GHEC2AMI:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: gh-ec2-ami
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Action:
+              - ec2:AttachVolume
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:CopyImage
+              - ec2:CreateImage
+              - ec2:CreateKeypair
+              - ec2:CreateSecurityGroup
+              - ec2:CreateSnapshot
+              - ec2:CreateTags
+              - ec2:CreateVolume
+              - ec2:DeleteKeyPair
+              - ec2:DeleteSecurityGroup
+              - ec2:DeleteSnapshot
+              - ec2:DeleteVolume
+              - ec2:DeregisterImage
+              - ec2:DescribeImageAttribute
+              - ec2:DescribeImages
+              - ec2:DescribeInstances
+              - ec2:DescribeInstanceStatus
+              - ec2:DescribeRegions
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSnapshots
+              - ec2:DescribeSubnets
+              - ec2:DescribeTags
+              - ec2:DescribeVolumes
+              - ec2:DetachVolume
+              - ec2:GetPasswordData
+              - ec2:ModifyImageAttribute
+              - ec2:ModifyInstanceAttribute
+              - ec2:ModifySnapshotAttribute
+              - ec2:RegisterImage
+              - ec2:RunInstances
+              - ec2:StopInstances
+              - ec2:TerminateInstances
+            Resource:
+              - '*'
+      Users: 
+        - ghactions-app
+
+  CodeDeployServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: CodeDeployServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Sid: ''
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      Path: "/"
+
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ComputePlatform: Server
+      ApplicationName: csye6225webapp
+    
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    DependsOn: CodeDeployApplication
+    Properties:
+      DeploymentGroupName: csye6225-webapp-deployment
+      ApplicationName: !Ref CodeDeployApplication
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITHOUT_TRAFFIC_CONTROL
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      AutoRollbackConfiguration:
+        Enabled: 'true'
+        Events:
+          - DEPLOYMENT_FAILURE
+      Ec2TagFilters: 
+        - Key: Name
+          Value: CSYE6225-CloudApplication-ASG
+          Type: KEY_AND_VALUE
 
 Outputs:
   VpcId:
