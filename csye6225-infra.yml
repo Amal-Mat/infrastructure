@@ -84,6 +84,11 @@ Parameters:
       - "dev.amalmathur.me."
       - "demo.amalmathur.me."
 
+  S3BucketName:
+    Description: "S3 Bucket Name"
+    Type: String
+    Default: demo
+
 
 Resources:
   # Create a VPC
@@ -350,7 +355,7 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Subnet group for mySQL Database
-      DBSubnetGroupName: 'RDS Subnet Group'
+      DBSubnetGroupName: RDS Subnet Group
       SubnetIds:
       - Ref: PrivateSubnet1
       - Ref: PrivateSubnet2
@@ -360,11 +365,11 @@ Resources:
     Type: 'AWS::RDS::DBInstance'
     DeletionPolicy: Delete
     Properties:
-      AllocatedStorage: '50'
+      AllocatedStorage: 50
       Engine: MySQL
       EngineVersion: 8.0.16
       DBInstanceClass: db.t3.micro
-      MultiAZ: 'false'
+      MultiAZ: false
       DBInstanceIdentifier: csye6225
       MasterUsername: !Ref DatabaseUsername
       MasterUserPassword: !Ref DatabasePassword
@@ -372,7 +377,7 @@ Resources:
       DBSubnetGroupName: !Ref DatabaseSubnetGroup
       VPCSecurityGroups: 
         - !GetAtt Database.GroupId
-      PubliclyAccessible: 'false'
+      PubliclyAccessible: false
       DBName: csye6225
       Port: 3306
 
@@ -386,7 +391,7 @@ Resources:
 
   # Load Balancer
   LoadBalancerResource:
-    DependsOn: InternetGateway
+    DependsOn: VPCGatewayAttachment
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: EC2LoadBalancer
@@ -405,6 +410,7 @@ Resources:
 
   # Load Balancer Target
   LoadBalancerTargetGroup:
+    DependsOn: LoadBalancerResource
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: EC2TargetGroup
@@ -414,12 +420,12 @@ Resources:
       VpcId: !Ref VPC
       IpAddressType: ipv4
       HealthCheckIntervalSeconds: 90
-      HealthCheckPath: '/'
+      HealthCheckPath: /healthz
       HealthyThresholdCount: 3
       UnhealthyThresholdCount: 5
       HealthCheckTimeoutSeconds: 60
-      HealthCheckPort: '3000'
-      HealthCheckProtocol: 'HTTP'
+      HealthCheckPort: 3000
+      HealthCheckProtocol: HTTP
       TargetGroupAttributes:
       - Key: deregistration_delay.timeout_seconds
         Value: 20
@@ -488,24 +494,22 @@ Resources:
       LaunchTemplateName: asg_launch_template
       LaunchTemplateData:
         BlockDeviceMappings:
-        - DeviceName: "/dev/xvda"
+        - DeviceName: /dev/xvda
           Ebs:
             VolumeSize: 60
             VolumeType: "gp2"
             DeleteOnTermination: true
         ImageId: !Ref AMI
-        InstanceType: "t2.micro"
+        InstanceType: t2.micro
         KeyName: !Ref KeyName
         NetworkInterfaces:
-        - DeviceIndex: 0
-          AssociatePublicIpAddress: true
-          Groups: 
-          - !GetAtt Application.GroupId
-          DeleteOnTermination: true
-        IamInstanceProfile: 
-          Arn: !GetAtt
-            - S3Profile
-            - Arn
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: true
+            Groups: 
+              - !GetAtt Application.GroupId
+            DeleteOnTermination: true
+        IamInstanceProfile:
+          Arn: !GetAtt S3Profile.Arn
         UserData:
           Fn::Base64: 
             !Sub | 
@@ -529,17 +533,24 @@ Resources:
               rm -rf node_modules
               sudo npm i
               sudo pm2 reload all --update-env
+      # Tags:
+      #   - Key: Application
+      #     Value: CSYE6225-CloudApplication-ASG
+      #     PropagateAtLaunch: true
+      #   - Key: Name
+      #     Value: WebAppAutoScalingGroup
+      #     PropagateAtLaunch: true
 
   # Creating an Auto Scaling Group
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: WebAppAutoScalingGroup
-      AvailabilityZones:
-      - !Select [ 0, !GetAZs ]
-      - !Select [ 1, !GetAZs ]
-      - !Select [ 2, !GetAZs ]
-      Cooldown: '60'
+      # AvailabilityZones:
+      #   - !Select [ 0, !GetAZs ]
+      #   - !Select [ 1, !GetAZs ]
+      #   - !Select [ 2, !GetAZs ]
+      Cooldown: 60
       DesiredCapacity: '1'
       HealthCheckGracePeriod: 90
       HealthCheckType: EC2
@@ -555,13 +566,20 @@ Resources:
       - !Ref Subnet1
       - !Ref Subnet2
       - !Ref Subnet3
+      Tags:
+        - Key: Application
+          Value: CSYE6225-CloudApplication-ASG
+          PropagateAtLaunch: "true"
+        - Key: Name
+          Value: WebAppAutoScalingGroup
+          PropagateAtLaunch: "true"
 
   # Scale Up
   WebAppScaleUpPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties: 
-      AdjustmentType: "ChangeInCapacity"
-      PolicyType: "SimpleScaling"
+      AdjustmentType: ChangeInCapacity
+      #PolicyType: "SimpleScaling"
       Cooldown: "60"
       ScalingAdjustment: 1
       AutoScalingGroupName: !Ref AutoScalingGroup
@@ -570,8 +588,8 @@ Resources:
   WebAppScaleDownPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
-      AdjustmentType: "ChangeInCapacity"
-      PolicyType: "SimpleScaling"
+      AdjustmentType: ChangeInCapacity
+      #PolicyType: "SimpleScaling"
       Cooldown: "60"
       ScalingAdjustment: -1
       AutoScalingGroupName: !Ref AutoScalingGroup
@@ -582,7 +600,7 @@ Resources:
     Properties:
       AlarmDescription: Scale up if CPU > 11%
       MetricName: CPUUtilization
-      Namespace: "AWS/EC2"
+      Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 1
@@ -627,6 +645,7 @@ Resources:
 
   S3Bucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
     Properties:
       AccessControl: Private
       BucketName: !Join ['.', [!Select [2, !Split [/, !Ref AWS::StackId ]], !Ref environment, 'amalmathur', 'me']]
@@ -648,7 +667,9 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-    DeletionPolicy: Delete
+      Tags:
+        - Key: Name
+          Value: !Ref S3BucketName
 
   IAMS3Policy:
     Type: 'AWS::IAM::Policy'
@@ -687,18 +708,18 @@ Resources:
           - Effect: Allow
             Principal:
               Service: 
-                - "ec2.amazonaws.com"
+                - ec2.amazonaws.com
             Action:
-              - "sts:AssumeRole"
-      Path: "/"
+              - 'sts:AssumeRole'
+      Path: /
 
   S3Profile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
-      Path: "/"
+      Path: /
       Roles: 
-        #- !Ref IAMS3Role
-        - !Ref CodeDeployServiceRole
+        - Ref: IAMS3Role
+        #- !Ref CodeDeployServiceRole
 
   CodeDeployEC2S3:
     Type: 'AWS::IAM::Policy'
@@ -712,10 +733,10 @@ Resources:
               - "s3:GetObject"
               - "s3:ListObject"
             Resource:
-              - !Sub arn:aws:s3:::csye6225-codedeploy-us-east-1
-              - !Sub arn:aws:s3:::csye6225-codedeploy-us-east-1/*
+              - arn:aws:s3:::csye6225-codedeploy-us-east-1
+              - arn:aws:s3:::csye6225-codedeploy-us-east-1/*
       Roles:
-        - !Ref CodeDeployServiceRole
+        - !Ref IAMS3Role
 
   GHUploadToS3:
     Type: 'AWS::IAM::Policy'
@@ -739,14 +760,12 @@ Resources:
   GHCodeDeploy:
     Type: 'AWS::IAM::Policy'
     Properties:
-      PolicyName: GH-Code-Deploy
+      PolicyName: GHCodeDeploy
       PolicyDocument: 
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Action:
-              - "codedeploy:GetDeployment"
-              - "codedeploy:CreateDeployment"
               - "codedeploy:RegisterApplicationRevision"
               - "codedeploy:GetApplicationRevision"
             Resource: !Join ["", ["arn:aws:codedeploy:us-east-1:", !Ref "AWS::AccountId", ":application:", !Ref CodeDeployApplication,],]
@@ -821,7 +840,6 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Sid: ''
             Principal:
               Service:
                 - codedeploy.amazonaws.com
@@ -843,6 +861,8 @@ Resources:
       DeploymentGroupName: csye6225-webapp-deployment
       ApplicationName: !Ref CodeDeployApplication
       ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      AutoScalingGroups: 
+        - Ref: AutoScalingGroup
       DeploymentStyle:
         DeploymentType: IN_PLACE
         DeploymentOption: WITHOUT_TRAFFIC_CONTROL
@@ -855,6 +875,32 @@ Resources:
         - Key: Name
           Value: CSYE6225-CloudApplication-ASG
           Type: KEY_AND_VALUE
+
+
+  CloudWatchAgentPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: "EC2CloudWatchPolicy"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'cloudwatch:PutMetricData'
+              - 'ec2:DescribeTags'
+              - 'logs:PutLogEvents'
+              - 'logs:DescribeLogStreams'
+              - 'logs:DescribeLogGroups'
+              - 'logs:CreateLogStream'
+              - 'logs:CreateLogGroup'
+            Resource: "*"
+          - Effect: Allow
+            Action: 
+              - 'ssm:GetParameter'
+              - 'ssm:PutParameter'
+            Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
+      Roles:
+        - Ref: IAMS3Role
 
 Outputs:
   VpcId:
