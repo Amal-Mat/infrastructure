@@ -557,7 +557,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchConfiguration
         Version: !GetAtt LaunchConfiguration.LatestVersionNumber
-      MinSize: '0'
+      MinSize: '1'
       MaxSize: '5'
       NewInstancesProtectedFromScaleIn: false
       TargetGroupARNs: 
@@ -733,8 +733,8 @@ Resources:
               - "s3:GetObject"
               - "s3:ListObject"
             Resource:
-              - arn:aws:s3:::csye6225-codedeploy-us-east-1
-              - arn:aws:s3:::csye6225-codedeploy-us-east-1/*
+              - arn:aws:s3:::csye-codedeploy-us-east-1
+              - arn:aws:s3:::csye-codedeploy-us-east-1/*
       Roles:
         - !Ref IAMS3Role
 
@@ -751,8 +751,8 @@ Resources:
               - "s3:ListObject"
               - "s3:PutObject"
             Resource:
-              - arn:aws:s3:::csye6225-codedeploy-us-east-1
-              - arn:aws:s3:::csye6225-codedeploy-us-east-1/*
+              - arn:aws:s3:::csye-codedeploy-us-east-1
+              - arn:aws:s3:::csye-codedeploy-us-east-1/*
       Users: 
         - ghactions-app
 
