@@ -87,7 +87,12 @@ Parameters:
   S3BucketName:
     Description: "S3 Bucket Name"
     Type: String
-    Default: demo
+    Default: dev
+
+  CertificateARN:
+    Description: ARN for the first certificate
+    Type: String
+    Default: arn:aws:acm:us-east-1:394820470736:certificate/88772010-0009-4596-9375-cc47317b7965
 
 
 Resources:
@@ -380,6 +385,8 @@ Resources:
       PubliclyAccessible: false
       DBName: csye6225
       Port: 3306
+      StorageEncrypted: true
+      KmsKeyId: !GetAtt RDSKmsKey.Arn
 
   RDSParameterGroup:
     Type: 'AWS::RDS::DBParameterGroup'
@@ -419,11 +426,11 @@ Resources:
       Protocol: 'HTTP'
       VpcId: !Ref VPC
       IpAddressType: ipv4
-      HealthCheckIntervalSeconds: 90
+      HealthCheckIntervalSeconds: 30
       HealthCheckPath: /healthz
       HealthyThresholdCount: 3
       UnhealthyThresholdCount: 5
-      HealthCheckTimeoutSeconds: 60
+      #HealthCheckTimeoutSeconds: 60
       HealthCheckPort: 3000
       HealthCheckProtocol: HTTP
       TargetGroupAttributes:
@@ -438,8 +445,11 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref LoadBalancerTargetGroup
       LoadBalancerArn: !Ref LoadBalancerResource
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn:
+            Ref: CertificateARN
 
   # Adding a EC2 Instance
   # EC2Instance:
@@ -494,11 +504,13 @@ Resources:
       LaunchTemplateName: asg_launch_template
       LaunchTemplateData:
         BlockDeviceMappings:
-        - DeviceName: /dev/xvda
+        - DeviceName: /dev/sdm
           Ebs:
             VolumeSize: 60
             VolumeType: "gp2"
             DeleteOnTermination: true
+            Encrypted: true
+            KmsKeyId: !GetAtt EBSKmsKey.Arn
         ImageId: !Ref AMI
         InstanceType: t2.micro
         KeyName: !Ref KeyName
@@ -552,14 +564,14 @@ Resources:
       #   - !Select [ 2, !GetAZs ]
       Cooldown: 60
       DesiredCapacity: '1'
-      HealthCheckGracePeriod: 90
-      HealthCheckType: EC2
+      #HealthCheckGracePeriod: 90
+      #HealthCheckType: EC2
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchConfiguration
         Version: !GetAtt LaunchConfiguration.LatestVersionNumber
       MinSize: '1'
       MaxSize: '5'
-      NewInstancesProtectedFromScaleIn: false
+      #NewInstancesProtectedFromScaleIn: false
       TargetGroupARNs: 
         - !Ref LoadBalancerTargetGroup
       VPCZoneIdentifier: 
@@ -570,9 +582,7 @@ Resources:
         - Key: Application
           Value: CSYE6225-CloudApplication-ASG
           PropagateAtLaunch: "true"
-        - Key: Name
-          Value: WebAppAutoScalingGroup
-          PropagateAtLaunch: "true"
+      
 
   # Scale Up
   WebAppScaleUpPolicy:
@@ -580,7 +590,7 @@ Resources:
     Properties: 
       AdjustmentType: ChangeInCapacity
       #PolicyType: "SimpleScaling"
-      Cooldown: "60"
+      Cooldown: 60
       ScalingAdjustment: 1
       AutoScalingGroupName: !Ref AutoScalingGroup
 
@@ -590,7 +600,7 @@ Resources:
     Properties:
       AdjustmentType: ChangeInCapacity
       #PolicyType: "SimpleScaling"
-      Cooldown: "60"
+      Cooldown: 60
       ScalingAdjustment: -1
       AutoScalingGroupName: !Ref AutoScalingGroup
 
@@ -917,7 +927,7 @@ Resources:
     Properties:
       PolicyDocument:   
         Version: '2008-10-17'
-        Id: __default_statement_ID
+        Id: __default_policy_ID
         Statement:
           - Sid: __default_statement_ID
             Effect: Allow
@@ -1065,6 +1075,152 @@ Resources:
               - !GetAtt DynamodbTable.Arn
       Roles:
         - !Ref IAMS3Role
+
+
+  EBSKmsKey: 
+    Type: AWS::KMS::Key
+    Properties: 
+      Description: 'KMS Key for EBS'
+      KeyPolicy: 
+        Id: "kms-key-for-ebs"
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:  
+              AWS: 
+                - !Join ["", ["arn:aws:iam::", !Ref "AWS::AccountId", ":root"],]
+                - !Join ["", ["arn:aws:iam::", !Ref "AWS::AccountId", ":role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",],]
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow access for Key Administrators
+            Effect: Allow
+            Principal:  
+              AWS: 
+                - !Join ["", ["arn:aws:iam::", !Ref "AWS::AccountId", ":role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",],]
+            Action: 
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Resource: '*'
+          - Sid: Allow use of the Key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join ["", ["arn:aws:iam::", !Ref "AWS::AccountId", ":role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",],]
+            Action: 
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: Allow attachment of persistent resources
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join ["", ["arn:aws:iam::", !Ref "AWS::AccountId", ":role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",],]
+            Action:
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: '*'
+
+  EBSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/ebsKey
+      TargetKeyId:
+        Ref: EBSKmsKey
+
+  RDSKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: 'KMS Key for RDS'
+      KeyPolicy:
+        Id: "kms-key-for-rds"
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Join
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow access for Key Administrators
+            Effect: Allow
+            Principal:  
+              AWS: !Join
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS'
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Resource: '*'
+          - Sid: Allow use of the Key
+            Effect: Allow
+            Principal:
+              AWS: !Join
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS'
+            Action: 
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: Allow attachment of persistent resources
+            Effect: Allow
+            Principal:  
+              AWS: !Join
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS'
+            Action: 
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: '*'
+
+  RDSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/rdsKey
+      TargetKeyId: 
+        Ref: RDSKmsKey
 
 Outputs:
   VpcId:
