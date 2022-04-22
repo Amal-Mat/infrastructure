@@ -28,3 +28,6 @@ Parameters to be included - Stack Name, AWS Region
 CLI Command -
 aws cloudformation --profile dev delete-stack --stack-name testStack1 --region us-east-1
 
+# Importing SSL Certificate
+aws acm import-certificate --profile dev --certificate fileb:///users/amal/Desktop/dev_amalmathur_me/dev_amalmathur_me.crt --certificate-chain fileb:///users/amal/Desktop/dev_amalmathur_me/dev_amalmathur_me.ca-bundle --private-key fileb:///users/amal/Desktop/dev_amalmathur_me/private.key
+
